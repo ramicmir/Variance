@@ -136,6 +136,8 @@ class DQN(OffPolicyAlgorithm):
         self.max_grad_norm = max_grad_norm
         # "epsilon" for the epsilon-greedy exploration
         self.exploration_rate = 0.0
+        self.variances = []
+        self.count = 0
 
         if _init_setup_model:
             self._setup_model()
@@ -165,7 +167,7 @@ class DQN(OffPolicyAlgorithm):
         self.q_net = self.policy.q_net
         self.q_net_target = self.policy.q_net_target
 
-    def _on_step(self) -> None:
+    def _on_step(self,new_obs) -> None:
         """
         Update the exploration rate and target network if needed.
         This method is called in ``collect_rollouts()`` after each step in the environment.
@@ -180,6 +182,28 @@ class DQN(OffPolicyAlgorithm):
 
         self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
         self.logger.record("rollout/exploration_rate", self.exploration_rate)
+
+        self.q_net.features_extractor.set_dropout(True)
+
+        a = []
+
+        for i in range(10):
+            with th.no_grad():
+                a.append(th.squeeze(self.q_net(th.tensor(new_obs))))
+
+        a = th.stack(a)
+
+        self.variances.append(th.mean(th.var(a,0)))
+        self.count+=1
+
+        if self.count % 1000 == 0:
+            store = open("variances.csv","a")
+            store.write(str(th.mean(th.stack(self.variances)).item()) + ",\n")
+            store.close()
+            self.variances = []
+            self.count = 0
+
+        self.q_net.features_extractor.set_dropout(False)
 
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
         # Switch to train mode (this affects batch norm / dropout)
@@ -201,22 +225,6 @@ class DQN(OffPolicyAlgorithm):
                 next_q_values = next_q_values.reshape(-1, 1)
                 # 1-step TD target
                 target_q_values = replay_data.rewards + (1 - replay_data.dones) * self.gamma * next_q_values
-
-
-
-                self.q_net.features_extractor.set_dropout(True) # Start Dropout
-                
-                for i in range(20):
-
-                    a = self.q_net(replay_data.observations)
-
-                    print(th.mean(th.var(a[0])))                #TODO Insert your function here and move it to the action selection part,
-                                                                # I have just printed here to check, also the dimensionality is now correct (1,num_actions)
-                                                                # The variances do get smaller as the game progresses. 
-                                                                #would be interesting to see how they will behave during the whole training
-
-                                                                
-                self.q_net.features_extractor.set_dropout(False) # End Dropout
 
             # Get current Q-values estimates
             current_q_values = self.q_net(replay_data.observations)

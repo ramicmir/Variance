@@ -136,8 +136,10 @@ class NatureCNN(BaseFeaturesExtractor):
             observations = F.relu(self.cl3(observations))
 
         observations = self.flat(observations)
-
-        return self.linear(observations)
+        if self.use_dropout:
+            return F.dropout(self.linear(observations))
+        else:
+            return self.linear(observations)
 
 
 def create_mlp(
