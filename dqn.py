@@ -138,6 +138,7 @@ class DQN(OffPolicyAlgorithm):
         self.exploration_rate = 0.0
         self.variances = []
         self.count = 0
+        self.count_global_steps = 0
 
         if _init_setup_model:
             self._setup_model()
@@ -195,10 +196,11 @@ class DQN(OffPolicyAlgorithm):
 
         self.variances.append(th.mean(th.var(a,0)))
         self.count+=1
+        self.count_global_steps+=1
 
         if self.count % 1000 == 0:
             store = open("variances.csv","a")
-            store.write(str(th.mean(th.stack(self.variances)).item()) + ",\n")
+            store.write(str(self.count_global_steps) + "," + str(th.mean(th.stack(self.variances)).item()) + "\n")
             store.close()
             self.variances = []
             self.count = 0
