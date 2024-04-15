@@ -190,7 +190,7 @@ class DQN(OffPolicyAlgorithm):
 
         for i in range(10):
             with th.no_grad():
-                a.append(th.squeeze(self.q_net(th.tensor(new_obs))))
+                a.append(th.squeeze(self.q_net(new_obs)))
 
         a = th.stack(a)
 
