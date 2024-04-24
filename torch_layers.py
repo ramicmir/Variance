@@ -23,6 +23,7 @@ class BaseFeaturesExtractor(nn.Module):
         assert features_dim > 0
         self._observation_space = observation_space
         self._features_dim = features_dim
+        self.probability = .5
 
     @property
     def features_dim(self) -> int:
@@ -121,23 +122,23 @@ class NatureCNN(BaseFeaturesExtractor):
     def forward(self, observations: th.Tensor) -> th.Tensor:
 
         if self.use_dropout:
-            observations = F.dropout(F.relu(self.cl1(observations)))
+            observations = F.dropout2d(F.relu(self.cl1(observations)),p=self.probability)
         else:
             observations = F.relu(self.cl1(observations))
 
         if self.use_dropout:
-            observations = F.dropout(F.relu(self.cl2(observations)))
+            observations = F.dropout2d(F.relu(self.cl2(observations)),p=self.probability)
         else:
             observations = F.relu(self.cl2(observations))
 
         if self.use_dropout:
-            observations = F.dropout(F.relu(self.cl3(observations)))
+            observations = F.dropout2d(F.relu(self.cl3(observations)),p=self.probability)
         else:
             observations = F.relu(self.cl3(observations))
 
         observations = self.flat(observations)
         if self.use_dropout:
-            return F.dropout(self.linear(observations))
+            return F.dropout(self.linear(observations),p=self.probability)
         else:
             return self.linear(observations)
 

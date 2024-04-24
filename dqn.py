@@ -12,6 +12,7 @@ from stable_baselines3.common.policies import BasePolicy
 from stable_baselines3.common.type_aliases import GymEnv, MaybeCallback, Schedule
 from stable_baselines3.common.utils import get_linear_fn, get_parameters_by_name, polyak_update
 from stable_baselines3.dqn.policies import CnnPolicy, DQNPolicy, MlpPolicy, MultiInputPolicy, QNetwork
+from PIL import Image
 
 SelfDQN = TypeVar("SelfDQN", bound="DQN")
 
@@ -139,6 +140,8 @@ class DQN(OffPolicyAlgorithm):
         self.variances = []
         self.count = 0
         self.count_global_steps = 0
+        self.r = 0
+        self.output = ""
 
         if _init_setup_model:
             self._setup_model()
@@ -181,8 +184,9 @@ class DQN(OffPolicyAlgorithm):
             # Copy running stats, see GH issue #996
             polyak_update(self.batch_norm_stats, self.batch_norm_stats_target, 1.0)
 
-        self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
-        self.logger.record("rollout/exploration_rate", self.exploration_rate)
+
+
+
 
         self.q_net.features_extractor.set_dropout(True)
 
@@ -192,20 +196,41 @@ class DQN(OffPolicyAlgorithm):
             with th.no_grad():
                 a.append(th.squeeze(self.q_net(new_obs)))
 
+        self.q_net.features_extractor.set_dropout(False)
+
         a = th.stack(a)
 
-        self.variances.append(th.mean(th.var(a,0)))
+        v = th.mean(th.std(a,0))
+
+        self.variances.append(v)
+
+        self.exploration_rate = self.exploration_schedule(self._current_progress_remaining)
+
+        #if self.exploration_rate < .2:
+        #    self.exploration_rate = 1.
+
+        self.logger.record("rollout/exploration_rate", self.exploration_rate)
+
+
+
+        self.output+= str(self.count_global_steps) + "," + str(th.mean(th.stack(self.variances)).item()) + "\n"
+
+
         self.count+=1
         self.count_global_steps+=1
 
         if self.count % 1000 == 0:
             store = open("variances.csv","a")
-            store.write(str(self.count_global_steps) + "," + str(th.mean(th.stack(self.variances)).item()) + "\n")
+            store.write(self.output)
             store.close()
             self.variances = []
             self.count = 0
+            self.r = 0
+            self.output = ""
 
-        self.q_net.features_extractor.set_dropout(False)
+        # img = Image.fromarray(new_obs[0][0].numpy())
+
+        # img.save("img/out" + str(self.count_global_steps) + ".png")
 
     def train(self, gradient_steps: int, batch_size: int = 100) -> None:
         # Switch to train mode (this affects batch norm / dropout)
@@ -268,6 +293,7 @@ class DQN(OffPolicyAlgorithm):
         :return: the model's action and the next state
             (used in recurrent policies)
         """
+
         if not deterministic and np.random.rand() < self.exploration_rate:
             if self.policy.is_vectorized_observation(observation):
                 if isinstance(observation, dict):
@@ -277,8 +303,10 @@ class DQN(OffPolicyAlgorithm):
                 action = np.array([self.action_space.sample() for _ in range(n_batch)])
             else:
                 action = np.array(self.action_space.sample())
+
         else:
             action, state = self.policy.predict(observation, state, episode_start, deterministic)
+
         return action, state
 
     def learn(
